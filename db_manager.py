@@ -2,7 +2,7 @@ from sqlalchemy import String, ForeignKey, Integer, Column, JSON
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import select
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 Base = declarative_base()
 engine = create_async_engine('sqlite+aiosqlite:///reddit.db')
@@ -41,7 +41,7 @@ class Comment(Base):
 
 class DbManager:
     def __init__(self):
-        pass
+        self.posts = set()
 
     async def add_post(self, post_data: Dict[str, Any]) -> None:
         async with AsyncSessionLocal() as session:
@@ -60,6 +60,7 @@ class DbManager:
                     score=post_data.get("score"),
                 )
                 session.add(post)
+                self.posts.add(post.id)
 
                 comments = post_data.get("comments", [])
                 for comment_data in comments:
@@ -82,3 +83,6 @@ class DbManager:
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Post.id))
             return {row[0] for row in result.fetchall()}
+
+    async def load_cache(self) -> None:
+        self.posts = await self.get_posts_id()
