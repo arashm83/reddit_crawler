@@ -34,7 +34,7 @@ async def main():
     sem = asyncio.Semaphore(3)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.firefox.launch(headless=True)
         context = await browser.new_context(storage_state="state.json")
 
         success = await is_logged_in(context)

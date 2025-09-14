@@ -28,6 +28,7 @@ async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str],
                     "url": post.get("permalink", ""),
                     "score": post.get("score", "")
                 })
+
         except Exception as e:
             print(f"[get_page_posts] Error fetching posts from {subreddit}: {e}")
 
