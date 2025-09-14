@@ -1,5 +1,4 @@
 from playwright.async_api import async_playwright, BrowserContext
-from time import sleep
 import asyncio
 from login import login, is_logged_in
 from core import get_posts, get_posts_details
@@ -24,7 +23,7 @@ async def process_subreddit(contex: BrowserContext, subreddit: str, db: DbManage
                 post.update(details)
             except Exception as e:
                 print(f"[process_subreddit] Error fetching details for post {post['id']}: {e}")
-                raise e
+                continue
             try:
                 await db.add_post(post)
             except Exception as e:
