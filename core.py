@@ -37,17 +37,23 @@ async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str],
     try:
         await page.goto(f"https://www.reddit.com/r/{subreddit}/new/?feedViewType=compactView", wait_until="load")
         new_posts = get_page_posts(await page.content())
-        req_urls = []
+        visited_urls = set()
+        res_urls = []
+        page.on("response", lambda res: res_urls.append(res.url) if re.match(r"https://www.reddit.com/svc/shreddit/community-more-posts/new/.*", res.url) and not res.url in visited_urls else None)
         while len(new_posts) <= post_count:
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.on("request", lambda req: req_urls.append(req.url) if re.match(r"https://www.reddit.com/svc/shreddit/community-more-posts/new/.*", req.url) else None)
-            await page.wait_for_timeout(5000)
-
-            await page.goto(req_urls[-1], wait_until="load")
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.wait_for_timeout(5000)
-            new_posts.extend(get_page_posts(await page.content()))
             
+            await page.wait_for_timeout(5000)
+            if not res_urls:
+                break
+            url = res_urls.pop()
+            if url not in visited_urls:
+                visited_urls.add(url)
+                await page.goto(url, wait_until="load")
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(5000)
+                new_posts.extend(get_page_posts(await page.content()))
+
         print(f"found {len(new_posts)} new posts for {subreddit}")
 
     except TimeoutError as e:

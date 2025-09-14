@@ -36,13 +36,13 @@ async def main():
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
-        contex = await browser.new_context(storage_state="state.json")
+        context = await browser.new_context(storage_state="state.json")
 
-        success = await is_logged_in(contex)
+        success = await is_logged_in(context)
         if not success:
-            await login(contex)
+            await login(context)
         
-        tasks = [process_subreddit(contex, subreddit, DbManager(), sem) for subreddit in subreddits]
+        tasks = [process_subreddit(context, subreddit, DbManager(), sem) for subreddit in subreddits]
         await asyncio.gather(*tasks)
         
 if __name__=="__main__":
