@@ -31,11 +31,11 @@ async def is_logged_in(context: BrowserContext):
         page = await context.new_page()
         await page.goto("https://www.reddit.com", wait_until="domcontentloaded")
 
-        await page.wait_for_selector("input[type=text]", timeout=10000)
-        await page.close()
-        return True
-    except TimeoutError:
+        await page.wait_for_selector("a[id=login-button]", timeout=5000)
         await page.close()
         return False
+    except TimeoutError:
+        await page.close()
+        return True
     finally:
         await page.close()
