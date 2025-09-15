@@ -2,8 +2,17 @@ from bs4 import BeautifulSoup
 from playwright.async_api import BrowserContext, TimeoutError, Page
 from typing import List, Dict, Optional, Any
 import re
+import json
+import logging
 
-async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str], page: Optional[Page] = None, post_count: int = 50) -> List[Dict[str, Any]]:
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(),
+              logging.FileHandler("app.log")]
+)
+
+async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str], page: Optional[Page] = None, post_count: int = 100) -> List[Dict[str, Any]]:
     page_created = False
     if page is None or page.is_closed():
         page = await context.new_page()
@@ -28,15 +37,26 @@ async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str],
                     "url": post.get("permalink", ""),
                     "score": post.get("score", "")
                 })
+                logging.info(f"found new post for {subreddit} with id {post.get('id', '')}")
 
         except Exception as e:
-            print(f"[get_page_posts] Error fetching posts from {subreddit}: {e}")
+            logging.error(f"[get_page_posts] Error fetching posts from {subreddit}: {e}")
 
         return posts_data
     
     
     try:
-        await page.goto(f"https://www.reddit.com/r/{subreddit}/new/?feedViewType=compactView", wait_until="load")
+        last_page = json.load(open("checkpoint.json", 'r')).get(subreddit, "")
+        if last_page:
+            try:
+                await page.goto(last_page, wait_until="load")
+            except Exception as e:
+                logging.error(f"[get_posts] Error navigating to last page {last_page}: {e}")
+                logging.info("starting from first page!")
+                await page.goto(f"https://www.reddit.com/r/{subreddit}/new/?feedViewType=compactView", wait_until="load")
+        else:
+            await page.goto(f"https://www.reddit.com/r/{subreddit}/new/?feedViewType=compactView", wait_until="load")
+
         new_posts = get_page_posts(await page.content())
         visited_urls = set()
         res_urls = []
@@ -47,7 +67,7 @@ async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str],
             await page.wait_for_timeout(5000)
             if not res_urls:
                 break
-            url = res_urls.pop()
+            url = res_urls.pop(0)
             if url not in visited_urls:
                 visited_urls.add(url)
                 await page.goto(url, wait_until="load")
@@ -55,11 +75,21 @@ async def get_posts(subreddit: str, context: BrowserContext, db_posts: set[str],
                 await page.wait_for_timeout(5000)
                 new_posts.extend(get_page_posts(await page.content()))
 
-        print(f"found {len(new_posts)} new posts for {subreddit}")
+        checkpoints = {}
+        try:
+            with open("checkpoint.json", "r") as cp_file:
+                checkpoints = json.load(cp_file)
+        except Exception:
+            checkpoints = {}
+        with open("checkpoint.json", "w") as f:
+            checkpoints[subreddit] = page.url
+            json.dump(checkpoints, f)
+
+        logging.info(f"found {len(new_posts)} new posts for {subreddit}")
 
     except TimeoutError as e:
-        print(f"[get_posts] Timeout error fetching posts from {subreddit}: {e}")
-    
+        logging.error(f"[get_posts] Timeout error fetching posts from {subreddit}: {e}")
+
     finally:
         if page_created:
             await page.close()
@@ -135,7 +165,7 @@ async def get_posts_details(
         soup = BeautifulSoup(html, "html.parser")
         post = soup.find("shreddit-post")
         if not post:
-            print(f"[get_posts_details] No post found at {url}")
+            logging.warning(f"[get_posts_details] No post found at {url}")
             return None
         
         post_details = {
@@ -153,7 +183,7 @@ async def get_posts_details(
 
         return post_details
     except Exception as e:
-        print(f"[get_posts_details] Error fetching post details from {url}: {e}")
+        logging.error(f"[get_posts_details] Error fetching post details from {url}: {e}")
         return None
     finally:
         if page_created:
